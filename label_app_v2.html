@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Kitchen Label Builder — v2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+
+<!-- Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<style>
+  :root{
+    --label-width-mm:50.8mm; /* 2 inch */
+    --label-height-mm:30mm;
+  }
+  body{font-family:Inter, Arial, Helvetica, sans-serif;margin:18px;background:#f7f8fb;color:#222}
+  .wrap{max-width:980px;margin:0 auto;display:flex;gap:18px;align-items:flex-start}
+  .controls{flex:1;min-width:300px;background:#fff;padding:18px;border-radius:10px;box-shadow:0 4px 18px rgba(20,30,60,0.06)}
+  .preview-area{width:calc(var(--label-width-mm) + 32px);background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 24px rgba(12,20,40,0.06)}
+  h1{font-size:18px;margin:0 0 12px 0}
+  label{display:block;margin-top:10px;font-weight:600;font-size:13px}
+  input,select,textarea{width:100%;padding:8px;margin-top:6px;border:1px solid #e5e7eb;border-radius:6px}
+  .row{display:flex;gap:8px}
+  .row .col{flex:1}
+  .btn{display:inline-block;padding:10px 14px;background:#0b76ff;color:#fff;border-radius:8px;border:none;cursor:pointer;margin-top:12px}
+  .btn.secondary{background:#06b981}
+  .small{font-size:13px;color:#666;margin-top:8px}
+  #log{font-family:monospace;background:#111827;color:#fff;padding:8px;border-radius:6px;margin-top:12px;min-height:60px}
+  .label-canvas { width:var(--label-width-mm); height:auto; background:#fff; border:1px solid #ddd; padding:6px; box-sizing: border-box; }
+  .label-inner{ width:calc(var(--label-width-mm) - 12px); min-height: calc(var(--label-height-mm)); font-family: 'Helvetica Neue', Arial, sans-serif; font-size:12px; color:#111 }
+  .label-heading{ text-align:center; font-weight:800; margin-bottom:6px; font-size:12px }
+  .label-item{ font-weight:900; font-size:16px; margin:4px 0 }
+  .label-meta{ font-size:11px; color:#333; margin:3px 0 }
+  .label-footer{ font-size:10px; color:#666; margin-top:6px; text-align:center }
+  .options{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .note{font-size:13px;color:#555;margin-top:8px}
+  .muted{color:#666;font-size:13px}
+  .template-select{margin-top:8px}
+</style>
+</head>
+<body>
+  <div style="max-width:1100px;margin:12px auto">
+    <h1>Kitchen Label Builder — v2 (Preview & High-quality PDF)</h1>
+    <div class="wrap">
+      <div class="controls">
+        <div>
+          <label>Item name</label>
+          <input id="item" placeholder="Paneer Butter Masala" value="Paneer Butter Masala"/>
+          <label>Station</label>
+          <select id="station">
+            <option>Hot Kitchen</option>
+            <option>Cold Kitchen</option>
+            <option>Tandoor</option>
+            <option>Bakery</option>
+          </select>
+          <div class="row">
+            <div class="col">
+              <label>Shelf life (hours)</label>
+              <input id="shelf" value="24"/>
+            </div>
+            <div class="col">
+              <label>Copies</label>
+              <input id="copies" value="1"/>
+            </div>
+          </div>
+
+          <label class="template-select">Template</label>
+          <select id="template">
+            <option value="compact">Compact (tall item)</option>
+            <option value="detailed">Detailed (with footer)</option>
+            <option value="bold">Bold large item</option>
+          </select>
+
+          <div class="options">
+            <button id="previewBtn" class="btn">Preview</button>
+            <button id="downloadPdfBtn" class="btn secondary">Download High-quality PDF</button>
+            <button id="downloadPngBtn" class="btn" style="background:#374151">Download PNG</button>
+          </div>
+
+          <div class="note">Tip: Use “Download High-quality PDF” to get crisp vector-like output for label printing. If your printer prints images, this PDF will be high resolution.</div>
+        </div>
+
+        <div id="log" style="display:none"></div>
+      </div>
+
+      <div class="preview-area">
+        <div style="text-align:center;margin-bottom:10px"><strong>Live Label Preview</strong></div>
+
+        <!-- This wrapper is what we capture with html2canvas -->
+        <div id="labelWrapper" class="label-canvas" role="img" aria-label="Label preview">
+          <div id="labelInner" class="label-inner">
+            <!-- injected -->
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:8px">Paper width set to <strong>50.8mm (2")</strong>. You can change CSS variable --label-width-mm if needed.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(async function(){
+  const itemEl = document.getElementById('item');
+  const stationEl = document.getElementById('station');
+  const shelfEl = document.getElementById('shelf');
+  const copiesEl = document.getElementById('copies');
+  const previewBtn = document.getElementById('previewBtn');
+  const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+  const downloadPngBtn = document.getElementById('downloadPngBtn');
+  const templateEl = document.getElementById('template');
+  const labelInner = document.getElementById('labelInner');
+  const labelWrapper = document.getElementById('labelWrapper');
+
+  function fmtDate(d){ const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const hh = String(d.getHours()).padStart(2,'0'); const min = String(d.getMinutes()).padStart(2,'0'); return dd + '/' + mm + ' ' + hh + ':' + min; }
+
+  function buildHtml(item,station,prepISO,shelfHours,template){
+    const prep = new Date(prepISO);
+    const expiry = new Date(prep.getTime() + shelfHours*3600*1000);
+    if(template === 'compact'){
+      return `
+        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-item">${escapeHtml(item)}</div>
+        <div class="label-meta">Station: ${escapeHtml(station)}</div>
+        <div class="label-meta">Prep: ${fmtDate(prep)}</div>
+        <div class="label-meta">Use by: ${fmtDate(expiry)}</div>
+      `;
+    } else if(template === 'detailed'){
+      return `
+        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="flex:1">
+            <div class="label-item">${escapeHtml(item)}</div>
+            <div class="label-meta">Station: ${escapeHtml(station)}</div>
+            <div class="label-meta">Prep: ${fmtDate(prep)}</div>
+            <div class="label-meta">Use by: ${fmtDate(expiry)}</div>
+          </div>
+        </div>
+        <div class="label-footer">Made with ❤️ — Your Kitchen</div>
+      `;
+    } else {
+      return `
+        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-item" style="font-size:18px">${escapeHtml(item)}</div>
+        <div class="label-meta">Use by: ${fmtDate(expiry)} • ${escapeHtml(station)}</div>
+      `;
+    }
+  }
+
+  function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+  previewBtn.addEventListener('click', ()=>{
+    const item = itemEl.value.trim() || 'Item';
+    const station = stationEl.value;
+    const shelf = parseInt(shelfEl.value || '24',10);
+    const now = new Date().toISOString();
+    labelInner.innerHTML = buildHtml(item,station,now,shelf,templateEl.value);
+    // Ensure wrapper visible
+    labelWrapper.style.display = 'block';
+  });
+
+  // High quality PDF: we render at a high scale to keep crispness then add to jsPDF
+  downloadPdfBtn.addEventListener('click', async ()=>{
+    try{
+      if(!labelInner.innerHTML.trim()) previewBtn.click();
+
+      const copies = Math.max(1, parseInt(copiesEl.value || '1',10));
+      // Render at high scale for crispness:
+      const scale = 3; // increase to 3x for high-res
+      const canvas = await html2canvas(labelWrapper, {backgroundColor:'#ffffff', scale});
+      // Prepare jsPDF
+      const { jsPDF } = window.jspdf;
+      // convert width from mm to px using canvas ratio:
+      const mmWidth = 50.8;
+      const pdf = new jsPDF({ unit: 'mm', format: [mmWidth, (canvas.height / canvas.width) * mmWidth] });
+
+      // If multiple copies requested, create multiple pages
+      const imgData = canvas.toDataURL('imagePNG');
+      for(let i=0;i<copies;i++){
+        if(i>0) pdf.addPage([mmWidth, (canvas.height / canvas.width) * mmWidth]);
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, mmWidth, (canvas.height / canvas.width) * mmWidth);
+      }
+
+      const filename = 'label-' + new Date().toISOString().slice(0,19).replaceAll(':','-') + '.pdf';
+      pdf.save(filename);
+      alert('PDF saved: ' + filename);
+    }catch(e){
+      console.error(e);
+      alert('PDF creation failed: ' + e);
+    }
+  });
+
+  // Download PNG
+  downloadPngBtn.addEventListener('click', async ()=>{
+    try{
+      if(!labelInner.innerHTML.trim()) previewBtn.click();
+      const canvas = await html2canvas(labelWrapper, {backgroundColor:'#ffffff', scale:3});
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = 'label-' + new Date().toISOString().slice(0,19).replaceAll(':','-') + '.png';
+      link.click();
+    }catch(e){
+      console.error(e);
+      alert('PNG creation failed: ' + e);
+    }
+  });
+
+  // Render initial preview on load
+  previewBtn.click();
+
+})();
+</script>
+</body>
+</html>
