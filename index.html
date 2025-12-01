@@ -209,6 +209,127 @@
   previewBtn.click();
 
 })();
+  <!-- LAN Print Integration: paste at end of body (after other scripts) -->
+<script>
+// ----------------- helpers -----------------
+function uint8ToBase64(u8) {
+  let CHUNK_SIZE = 0x8000;
+  let index = 0, length = u8.length, result = '';
+  while (index < length) {
+    let slice = u8.subarray(index, Math.min(index + CHUNK_SIZE, length));
+    result += String.fromCharCode.apply(null, slice);
+    index += CHUNK_SIZE;
+  }
+  return btoa(result);
+}
+
+// Build ESC/POS buffer for 80mm/3" printer (text + bold timestamps + large item)
+function buildEscPosBufferFromFields({ heading, item, station, prepISO, shelfHours }) {
+  const encoder = new TextEncoder(); // UTF-8
+  const ESC = 0x1B, GS = 0x1D;
+  const parts = [];
+
+  // init
+  parts.push(Uint8Array.from([ESC, 0x40])); // ESC @
+
+  // heading centered
+  parts.push(Uint8Array.from([ESC, 0x61, 0x01])); // center
+  parts.push(encoder.encode(heading + '\n'));
+
+  // left align for rest
+  parts.push(Uint8Array.from([ESC, 0x61, 0x00])); // left
+
+  // item - double size + bold
+  parts.push(Uint8Array.from([ESC, 0x21, 0x11])); // double width & height (if supported)
+  parts.push(Uint8Array.from([ESC, 0x45, 0x01])); // bold on
+  parts.push(encoder.encode(item + '\n'));
+  parts.push(Uint8Array.from([ESC, 0x45, 0x00])); // bold off
+  parts.push(Uint8Array.from([ESC, 0x21, 0x00])); // normal size
+
+  // station
+  parts.push(encoder.encode('Station: ' + station + '\n'));
+
+  // timestamps (prep + expiry) as bold (per your request)
+  const prep = new Date(prepISO);
+  const expiry = new Date(prep.getTime() + (shelfHours * 3600 * 1000));
+  const fmt = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+
+  parts.push(Uint8Array.from([ESC, 0x45, 0x01])); // bold on
+  parts.push(encoder.encode('Prep: ' + fmt(prep) + '\n'));
+  parts.push(encoder.encode('Use by: ' + fmt(expiry) + '\n'));
+  parts.push(Uint8Array.from([ESC, 0x45, 0x00])); // bold off
+
+  // small footer / notes (if present)
+  // Note: keep ASCII only for compatibility; for logos or non-Latin text use raster image printing
+  parts.push(encoder.encode('\n'));
+
+  // feed and cut
+  parts.push(Uint8Array.from([ESC, 0x64, 0x03])); // feed 3 lines
+  parts.push(Uint8Array.from([GS, 0x56, 0x00]));  // cut (if supported)
+
+  // concat
+  const totalLen = parts.reduce((s,p) => s + p.length, 0);
+  const out = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const p of parts) { out.set(p, offset); offset += p.length; }
+  return out;
+}
+
+// send to bridge
+async function sendToBridge(u8, bridgeUrl = 'http://localhost:8001/print') {
+  const base64 = uint8ToBase64(u8);
+  const resp = await fetch(bridgeUrl, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ data: base64 })
+  });
+  return resp.json();
+}
+
+// ----------------- UI binding -----------------
+// Adjust selectors below if your inputs use different IDs
+async function printCurrentLabel() {
+  try {
+    // Read fields from your page — use your field ids (these match the v3 page)
+    const item = document.getElementById('item').value.trim();
+    const station = document.getElementById('station').value;
+    const shelf = parseInt(document.getElementById('shelf').value || '24', 10);
+    const notes = (document.getElementById('notes') || {}).value || '';
+    const heading = '*** KITCHEN LABEL ***';
+    const prepISO = new Date().toISOString();
+
+    // Build lines and buffer
+    const u8 = buildEscPosBufferFromFields({ heading, item, station, prepISO, shelfHours: shelf });
+
+    // Optionally show feedback
+    console.log('Sending print bytes to bridge...', u8.length);
+
+    // send
+    const result = await sendToBridge(u8);
+    console.log('Bridge result:', result);
+    alert('Print request sent: ' + (result.ok ? 'OK' : JSON.stringify(result)));
+  } catch (err) {
+    console.error('Print error', err);
+    alert('Print failed: ' + err);
+  }
+}
+
+// Add a "Print to LAN" button under your controls area (if not already present)
+(function addPrintButton(){
+  const controls = document.querySelector('.controls') || document.body;
+  if (!document.getElementById('printToLanBtn')) {
+    const b = document.createElement('button');
+    b.id = 'printToLanBtn';
+    b.textContent = 'Print to LAN';
+    b.style.padding = '10px 12px';
+    b.style.marginTop = '10px';
+    b.onclick = printCurrentLabel;
+    controls.appendChild(b);
+  }
+})();
+</script>
+
 </script>
 </body>
 </html>
+
