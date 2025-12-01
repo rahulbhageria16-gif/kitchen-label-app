@@ -119,7 +119,7 @@
     const expiry = new Date(prep.getTime() + shelfHours*3600*1000);
     if(template === 'compact'){
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">*** TRUFFLES ***</div>
         <div class="label-item">${escapeHtml(item)}</div>
         <div class="label-meta">Station: ${escapeHtml(station)}</div>
         <div class="label-meta">Prep: ${fmtDate(prep)}</div>
@@ -127,7 +127,7 @@
       `;
     } else if(template === 'detailed'){
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">*** TRUFFLES ***</div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="flex:1">
             <div class="label-item">${escapeHtml(item)}</div>
@@ -140,7 +140,7 @@
       `;
     } else {
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">*** TRUFFLES ***</div>
         <div class="label-item" style="font-size:18px">${escapeHtml(item)}</div>
         <div class="label-meta">Use by: ${fmtDate(expiry)} • ${escapeHtml(station)}</div>
       `;
@@ -212,3 +212,4 @@
 </script>
 </body>
 </html>
+
