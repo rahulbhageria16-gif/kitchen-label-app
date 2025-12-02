@@ -41,7 +41,7 @@
 </head>
 <body>
   <div style="max-width:1100px;margin:12px auto">
-    <h1>Kitchen Label Builder — v2 (Preview & High-quality PDF)</h1>
+    <h1>Truffles Kitchen Label</h1>
     <div class="wrap">
       <div class="controls">
         <div>
@@ -49,10 +49,8 @@
           <input id="item" placeholder="Paneer Butter Masala" value="Paneer Butter Masala"/>
           <label>Station</label>
           <select id="station">
-            <option>Hot Kitchen</option>
-            <option>Cold Kitchen</option>
-            <option>Tandoor</option>
-            <option>Bakery</option>
+            <option>Kitchen Section </option>
+            <option>Barista Section</option>
           </select>
           <div class="row">
             <div class="col">
@@ -119,7 +117,7 @@
     const expiry = new Date(prep.getTime() + shelfHours*3600*1000);
     if(template === 'compact'){
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">***Truffles***</div>
         <div class="label-item">${escapeHtml(item)}</div>
         <div class="label-meta">Station: ${escapeHtml(station)}</div>
         <div class="label-meta">Prep: ${fmtDate(prep)}</div>
@@ -127,7 +125,7 @@
       `;
     } else if(template === 'detailed'){
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">***Truffles***</div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="flex:1">
             <div class="label-item">${escapeHtml(item)}</div>
@@ -140,7 +138,7 @@
       `;
     } else {
       return `
-        <div class="label-heading">*** KITCHEN LABEL ***</div>
+        <div class="label-heading">***Truffles***</div>
         <div class="label-item" style="font-size:18px">${escapeHtml(item)}</div>
         <div class="label-meta">Use by: ${fmtDate(expiry)} • ${escapeHtml(station)}</div>
       `;
@@ -212,5 +210,6 @@
 </script>
 </body>
 </html>
+
 
 
